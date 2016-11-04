@@ -1,0 +1,7 @@
+boto3 >= 1.4.1
+PyYAML >= 3.12
+colorama >= 0.3.7
+pyOpenSSL >= 16.2.0
+pycrypto >= 2.6.1
+paramiko >= 2.0.2
+pystache >= 0.5.4

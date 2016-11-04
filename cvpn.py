@@ -20,6 +20,7 @@ import yaml
 import boto3
 import colorama
 import paramiko
+import pystache
 
 __author__ = 'Flier Lu <flier.lu@gmail.com>'
 
@@ -83,6 +84,21 @@ DEFAULT_VPN_REPO = 'siomiz/softethervpn'
 DEFAULT_VPN_USER = getpass.getuser()
 DEFAULT_VPN_PASS = genpass(12)
 DEFAULT_VPN_PSK = genpass(12)
+
+TPL_VPN_SERVICES = pystache.parse(u'''
+VPN services {{name}} is {{status}}
+===
+IP Address  : {{public_ip_address}}
+{{#running}}
+Started at  : {{started_at}}
+{{/running}}
+{{#l2tp_ipsec}}
+L2TP/IPSec  : enabled
+    username: {{username}}
+    password: {{password}}
+    psk     : {{psk}}
+{{/l2tp_ipsec}}
+''')
 
 log = logging.getLogger('main')
 
@@ -563,9 +579,23 @@ class CloudVPN(object):
                    ports=ports,
                    env=env)
 
-    def dump_vpn_info(self, vpn_services):
-        print(vpn_services)
+    def dump_vpn_info(self, instance, container):
+        ports = container['Config']['ExposedPorts']
+        env = dict([var.split('=') for var in container['Config']['Env']])
 
+        print(pystache.Renderer().render(TPL_VPN_SERVICES, {
+            'public_ip_address': instance.public_ip_address,
+            'name': container['Name'],
+            'status': container['State']['Status'],
+            'running': container['State']['Running'],
+            'started_at': container['State']['StartedAt'],
+            'l2tp_ipsec': '500/udp' in ports,
+            'openvpn': '1194/udp' in ports,
+            'softether': '5555/tcp' in ports,
+            'username': env.get('USERNAME'),
+            'password': env.get('PASSWORD'),
+            'psk': env.get('PSK')
+        }))
 
 if __name__ == '__main__':
     opts = parse_cmdline()
@@ -655,4 +685,6 @@ if __name__ == '__main__':
                         vpn_services = docker.inspect(vpn_container.id)
 
                     if vpn_services[0]['State']['Running']:
-                        cloud.dump_vpn_info(vpn_services[0])
+                        cloud.dump_vpn_info(vpn_instance, vpn_services[0])
+
+                        break
